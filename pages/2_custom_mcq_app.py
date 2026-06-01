@@ -95,8 +95,7 @@ if not df_mcq_c.empty:
     with step2_col:
         st.info("Step 2：為每一題設定分類 (下拉聯想與新增)")
         q_mcq = df_mcq_c["題號"].tolist()
-        sel_q_mcq = st.selectbox("選擇要輸入標籤的題號：", q_mcq, key="mcq_q_sel")
-        curr_vals_mcq = st.session_state.mcq_custom_values.get(sel_q_mcq, {})
+        sel_q_mcq = st.multiselect("選擇要輸入標籤的題號：", q_mcq, default=q_mcq[:1], key="mcq_q_sel")
 
         if st.session_state.mcq_clear_inputs:
             for col in st.session_state.mcq_custom_cols:
@@ -106,7 +105,18 @@ if not df_mcq_c.empty:
                 st.session_state[new_key] = ""
             st.session_state.mcq_clear_inputs = False
 
-        st.write(f"**正在編輯：第 {sel_q_mcq} 題**")
+        if sel_q_mcq:
+            selected_display = ", ".join(str(x) for x in sel_q_mcq)
+            st.write(f"**正在編輯：第 {selected_display} 題**")
+            all_values = [st.session_state.mcq_custom_values.get(q, {}) for q in sel_q_mcq]
+            curr_vals_mcq = {}
+            for col in st.session_state.mcq_custom_cols:
+                values_for_col = {v.get(col, "") for v in all_values}
+                curr_vals_mcq[col] = values_for_col.pop() if len(values_for_col) == 1 else ""
+        else:
+            st.warning("請先選擇至少一題。")
+            curr_vals_mcq = {}
+
         input_results_m = {}
         for col in st.session_state.mcq_custom_cols:
             history_opts = st.session_state.mcq_col_options_history.get(col, [])
@@ -128,23 +138,25 @@ if not df_mcq_c.empty:
                     input_results_m[col] = new_val
                 else:
                     input_results_m[col] = sel_val
+
         submit_col, note_col = st.columns([1, 1])
         with submit_col:
-            submit_btn_m = st.button("📥 儲存設定", key=f"mcq_save_btn_{sel_q_mcq}")
+            submit_btn_m = st.button("📥 儲存設定", key=f"mcq_save_btn_{'_'.join(str(x) for x in sel_q_mcq)}")
         save_note_m = note_col.empty()
         if st.session_state.mcq_save_note:
             save_note_m.caption(st.session_state.mcq_save_note)
 
-        if submit_btn_m:
-            if sel_q_mcq not in st.session_state.mcq_custom_values:
-                st.session_state.mcq_custom_values[sel_q_mcq] = {}
-            for col, val in input_results_m.items():
-                if val:
-                    st.session_state.mcq_custom_values[sel_q_mcq][col] = val
-                    if val not in st.session_state.mcq_col_options_history[col]:
-                        st.session_state.mcq_col_options_history[col].append(val)
+        if submit_btn_m and sel_q_mcq:
+            for sel_q in sel_q_mcq:
+                if sel_q not in st.session_state.mcq_custom_values:
+                    st.session_state.mcq_custom_values[sel_q] = {}
+                for col, val in input_results_m.items():
+                    if val:
+                        st.session_state.mcq_custom_values[sel_q][col] = val
+                        if val not in st.session_state.mcq_col_options_history[col]:
+                            st.session_state.mcq_col_options_history[col].append(val)
             st.session_state["mcq_last_saved_q"] = sel_q_mcq
-            st.session_state["mcq_save_note"] = f"已為第 {sel_q_mcq} 題設定分類"
+            st.session_state["mcq_save_note"] = f"已為第 {selected_display} 題設定分類"
             st.session_state.mcq_clear_inputs = True
             st.rerun()
 

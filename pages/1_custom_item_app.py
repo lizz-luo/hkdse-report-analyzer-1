@@ -58,8 +58,7 @@ if not df_item_c.empty:
     with step2_col:
         st.info("Step 2：為每一題設定分類 (下拉聯想與新增)")
         questions = df_item_c["題號"].tolist()
-        sel_q = st.selectbox("選擇要輸入標籤的題號：", questions, key="item_q_sel")
-        current_values = st.session_state.item_custom_values.get(sel_q, {})
+        sel_qs = st.multiselect("選擇要輸入標籤的題號：", questions, default=questions[:1], key="item_q_sel")
 
         if st.session_state.item_clear_inputs:
             for col in st.session_state.item_custom_cols:
@@ -69,7 +68,18 @@ if not df_item_c.empty:
                 st.session_state[new_key] = ""
             st.session_state.item_clear_inputs = False
 
-        st.write(f"**正在編輯：第 {sel_q} 題**")
+        if sel_qs:
+            selected_display = ", ".join(str(x) for x in sel_qs)
+            st.write(f"**正在編輯：第 {selected_display} 題**")
+            all_values = [st.session_state.item_custom_values.get(q, {}) for q in sel_qs]
+            current_values = {}
+            for col in st.session_state.item_custom_cols:
+                values_for_col = {v.get(col, "") for v in all_values}
+                current_values[col] = values_for_col.pop() if len(values_for_col) == 1 else ""
+        else:
+            st.warning("請先選擇至少一題。")
+            current_values = {}
+
         input_results = {}
         for col in st.session_state.item_custom_cols:
             history_opts = st.session_state.item_col_options_history.get(col, [])
@@ -91,23 +101,25 @@ if not df_item_c.empty:
                     input_results[col] = new_val
                 else:
                     input_results[col] = sel_val
+
         submit_col, note_col = st.columns([1, 1])
         with submit_col:
-            submit_btn = st.button("📥 儲存設定", key=f"item_save_btn_{sel_q}")
+            submit_btn = st.button("📥 儲存設定", key=f"item_save_btn_{'_'.join(str(x) for x in sel_qs)}")
         save_note = note_col.empty()
         if st.session_state.item_save_note:
             save_note.caption(st.session_state.item_save_note)
 
-        if submit_btn:
-            if sel_q not in st.session_state.item_custom_values:
-                st.session_state.item_custom_values[sel_q] = {}
-            for col, val in input_results.items():
-                if val:
-                    st.session_state.item_custom_values[sel_q][col] = val
-                    if val not in st.session_state.item_col_options_history[col]:
-                        st.session_state.item_col_options_history[col].append(val)
-            st.session_state["item_last_saved_q"] = sel_q
-            st.session_state["item_save_note"] = f"已為第 {sel_q} 題設定分類"
+        if submit_btn and sel_qs:
+            for sel_q in sel_qs:
+                if sel_q not in st.session_state.item_custom_values:
+                    st.session_state.item_custom_values[sel_q] = {}
+                for col, val in input_results.items():
+                    if val:
+                        st.session_state.item_custom_values[sel_q][col] = val
+                        if val not in st.session_state.item_col_options_history[col]:
+                            st.session_state.item_col_options_history[col].append(val)
+            st.session_state["item_last_saved_q"] = sel_qs
+            st.session_state["item_save_note"] = f"已為第 {selected_display} 題設定分類"
             st.session_state.item_clear_inputs = True
             st.rerun()
 
