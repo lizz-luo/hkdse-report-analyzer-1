@@ -19,6 +19,16 @@ if "item_clear_inputs" not in st.session_state:
     st.session_state.item_clear_inputs = False
 if "item_save_note" not in st.session_state:
     st.session_state.item_save_note = ""
+if "item_cutoff_high" not in st.session_state:
+    st.session_state.item_cutoff_high = 70
+if "item_cutoff_low" not in st.session_state:
+    st.session_state.item_cutoff_low = 30
+if "item_exp_high" not in st.session_state:
+    st.session_state.item_exp_high = 80
+if "item_exp_inter" not in st.session_state:
+    st.session_state.item_exp_inter = 60
+if "item_exp_low" not in st.session_state:
+    st.session_state.item_exp_low = 40
 
 st.page_link("app.py", label="⬅️ 返回主 app", icon="⬅️")
 
@@ -127,15 +137,90 @@ if not df_item_c.empty:
             st.session_state.item_clear_inputs = True
             st.rerun()
 
+    st.markdown("---")
+    st.info("Step 3：自訂分析重點")
+
+    tab_attainment, tab_expectation = st.tabs(["1️⃣ 科本得分率分類", "2️⃣ 校本預期平均得分率"])
+
+    with tab_attainment:
+        st.write("根據全港日校考生的平均得分率，將題目分為三個等級。")
+        col_cut1, col_cut2 = st.columns(2)
+        with col_cut1:
+            st.session_state.item_cutoff_high = st.number_input(
+                "高得分率分界值（%）：",
+                min_value=0, max_value=100, value=st.session_state.item_cutoff_high, step=1,
+                key="item_cutoff_high_input", help="高於此值為「High attainment」"
+            )
+        with col_cut2:
+            st.session_state.item_cutoff_low = st.number_input(
+                "低得分率分界值（%）：",
+                min_value=0, max_value=100, value=st.session_state.item_cutoff_low, step=1,
+                key="item_cutoff_low_input", help="低於此值為「Low attainment」，介乎之間為「Intermediate attainment」"
+            )
+        st.caption(f"分類設定：高≥{st.session_state.item_cutoff_high}% | 中{st.session_state.item_cutoff_low}%-{st.session_state.item_cutoff_high}% | 低≤{st.session_state.item_cutoff_low}%")
+
+    with tab_expectation:
+        st.write("設定本校學生在各類題目的預期得分率，用以判斷是否達到校本預期水平。")
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        with col_exp1:
+            st.session_state.item_exp_high = st.number_input(
+                "High attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.item_exp_high, step=1,
+                key="item_exp_high_input"
+            )
+        with col_exp2:
+            st.session_state.item_exp_inter = st.number_input(
+                "Intermediate attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.item_exp_inter, step=1,
+                key="item_exp_inter_input"
+            )
+        with col_exp3:
+            st.session_state.item_exp_low = st.number_input(
+                "Low attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.item_exp_low, step=1,
+                key="item_exp_low_input"
+            )
+
+    st.markdown("---")
+
     df_display = df_item_c.copy()
     for col in st.session_state.item_custom_cols:
         df_display[col] = df_display["初始序列"].apply(lambda x: st.session_state.item_custom_values.get(x, {}).get(col, ""))
+
+    # 計算 Day School Attainment
+    def get_attainment(rate):
+        rate_pct = rate * 100 if rate <= 1 else rate
+        if rate_pct >= st.session_state.item_cutoff_high:
+            return "High attainment"
+        elif rate_pct <= st.session_state.item_cutoff_low:
+            return "Low attainment"
+        else:
+            return "Intermediate attainment"
+
+    df_display["Day School Attainment"] = df_display["Day schools Mean %"].apply(get_attainment)
+
+    # 計算 School-based Expected Attainment
+    def get_expected_status(row):
+        attainment = row["Day School Attainment"]
+        your_rate = row["Your school Mean %"]
+        your_rate_pct = your_rate * 100 if your_rate <= 1 else your_rate
+
+        if attainment == "High attainment":
+            expected = st.session_state.item_exp_high
+        elif attainment == "Intermediate attainment":
+            expected = st.session_state.item_exp_inter
+        else:  # Low attainment
+            expected = st.session_state.item_exp_low
+
+        return "Attained ✓" if your_rate_pct >= expected else "Below Expectation ✗"
+
+    df_display["School-based Expected Attainment"] = df_display.apply(get_expected_status, axis=1)
 
     st.write("📊 **總覽表 (自動更新)：**")
     st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.info("Step 3：篩選與排序結果")
+    st.info("Step 4：篩選與排序結果")
 
     f_cols = st.columns(max(len(st.session_state.item_custom_cols), 1))
     active_filters = {}

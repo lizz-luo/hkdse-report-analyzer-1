@@ -19,6 +19,16 @@ if "mcq_clear_inputs" not in st.session_state:
     st.session_state.mcq_clear_inputs = False
 if "mcq_save_note" not in st.session_state:
     st.session_state.mcq_save_note = ""
+if "mcq_cutoff_high" not in st.session_state:
+    st.session_state.mcq_cutoff_high = 70
+if "mcq_cutoff_low" not in st.session_state:
+    st.session_state.mcq_cutoff_low = 30
+if "mcq_exp_high" not in st.session_state:
+    st.session_state.mcq_exp_high = 80
+if "mcq_exp_inter" not in st.session_state:
+    st.session_state.mcq_exp_inter = 60
+if "mcq_exp_low" not in st.session_state:
+    st.session_state.mcq_exp_low = 40
 
 def prepare_mcq_analysis_for_custom(df):
     df = df.copy()
@@ -35,8 +45,61 @@ def prepare_mcq_analysis_for_custom(df):
             except:
                 opts[k] = 0
         return max(opts, key=opts.get)
+    
     df["Your school Top Option"] = df.apply(lambda r: get_top_option(r, "Your school"), axis=1)
     df["Day schools Top Option"] = df.apply(lambda r: get_top_option(r, "Day schools"), axis=1)
+    
+    # 計算百分比和正確率
+    def calculate_percentages(row, prefix):
+        try:
+            a = float(row.get(f"{prefix} A_No.", 0))
+            b = float(row.get(f"{prefix} B_No.", 0))
+            c = float(row.get(f"{prefix} C_No.", 0))
+            d = float(row.get(f"{prefix} D_No.", 0))
+            total = a + b + c + d
+            
+            if total > 0:
+                return {
+                    f"{prefix} A_%": (a / total) * 100,
+                    f"{prefix} B_%": (b / total) * 100,
+                    f"{prefix} C_%": (c / total) * 100,
+                    f"{prefix} D_%": (d / total) * 100,
+                }
+            else:
+                return {
+                    f"{prefix} A_%": 0,
+                    f"{prefix} B_%": 0,
+                    f"{prefix} C_%": 0,
+                    f"{prefix} D_%": 0,
+                }
+        except:
+            return {
+                f"{prefix} A_%": 0,
+                f"{prefix} B_%": 0,
+                f"{prefix} C_%": 0,
+                f"{prefix} D_%": 0,
+            }
+    
+    # 計算 Your school 的百分比
+    your_pcts = df.apply(lambda r: calculate_percentages(r, "Your school"), axis=1)
+    for opt in ["A", "B", "C", "D"]:
+        df[f"Your school {opt}_%"] = your_pcts.apply(lambda x: x.get(f"Your school {opt}_%", 0))
+    
+    # 計算 Day schools 的百分比
+    day_pcts = df.apply(lambda r: calculate_percentages(r, "Day schools"), axis=1)
+    for opt in ["A", "B", "C", "D"]:
+        df[f"Day schools {opt}_%"] = day_pcts.apply(lambda x: x.get(f"Day schools {opt}_%", 0))
+    
+    # 計算正確率
+    def get_correct_rate(row, prefix):
+        corr_ans = str(row.get("Corr. Ans", "")).replace("☑️", "").strip()
+        if corr_ans in ["A", "B", "C", "D"]:
+            return row.get(f"{prefix} {corr_ans}_%", 0)
+        return 0
+    
+    df["Your school Correct %"] = df.apply(lambda r: get_correct_rate(r, "Your school"), axis=1)
+    df["Day schools Correct %"] = df.apply(lambda r: get_correct_rate(r, "Day schools"), axis=1)
+    
     return df
 
 def highlight_mcq_row(row):
@@ -168,11 +231,86 @@ if not df_mcq_c.empty:
     for col in st.session_state.mcq_custom_cols:
         df_mcq_display[col] = df_mcq_display["初始序列"].apply(lambda x: st.session_state.mcq_custom_values.get(x, {}).get(col, ""))
 
+    st.markdown("---")
+    st.info("Step 3：自訂分析重點")
+
+    tab_attainment, tab_expectation = st.tabs(["1️⃣ 正確率分類", "2️⃣ 校本預期正確率"])
+
+    with tab_attainment:
+        st.write("根據全港日校考生的平均正確率，將題目分為三個等級。")
+        col_cut1, col_cut2 = st.columns(2)
+        with col_cut1:
+            st.session_state.mcq_cutoff_high = st.number_input(
+                "高正確率分界值（%）：",
+                min_value=0, max_value=100, value=st.session_state.mcq_cutoff_high, step=1,
+                key="mcq_cutoff_high_input", help="高於此值為「High attainment」"
+            )
+        with col_cut2:
+            st.session_state.mcq_cutoff_low = st.number_input(
+                "低正確率分界值（%）：",
+                min_value=0, max_value=100, value=st.session_state.mcq_cutoff_low, step=1,
+                key="mcq_cutoff_low_input", help="低於此值為「Low attainment」，介乎之間為「Intermediate attainment」"
+            )
+        st.caption(f"分類設定：高≥{st.session_state.mcq_cutoff_high}% | 中{st.session_state.mcq_cutoff_low}%-{st.session_state.mcq_cutoff_high}% | 低≤{st.session_state.mcq_cutoff_low}%")
+
+    with tab_expectation:
+        st.write("設定本校學生在各類題目的預期正確率，用以判斷是否達到校本預期水平。")
+        col_exp1, col_exp2, col_exp3 = st.columns(3)
+        with col_exp1:
+            st.session_state.mcq_exp_high = st.number_input(
+                "High attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.mcq_exp_high, step=1,
+                key="mcq_exp_high_input"
+            )
+        with col_exp2:
+            st.session_state.mcq_exp_inter = st.number_input(
+                "Intermediate attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.mcq_exp_inter, step=1,
+                key="mcq_exp_inter_input"
+            )
+        with col_exp3:
+            st.session_state.mcq_exp_low = st.number_input(
+                "Low attainment 題目的預期（%）：",
+                min_value=0, max_value=100, value=st.session_state.mcq_exp_low, step=1,
+                key="mcq_exp_low_input"
+            )
+
+    st.markdown("---")
+
+    # 計算 Day School Attainment
+    def get_mcq_attainment(rate):
+        rate_pct = rate if rate >= 1 else rate * 100
+        if rate_pct >= st.session_state.mcq_cutoff_high:
+            return "High attainment"
+        elif rate_pct <= st.session_state.mcq_cutoff_low:
+            return "Low attainment"
+        else:
+            return "Intermediate attainment"
+
+    df_mcq_display["Day School Attainment"] = df_mcq_display["Day schools Correct %"].apply(get_mcq_attainment)
+
+    # 計算 School-based Expected Attainment
+    def get_mcq_expected_status(row):
+        attainment = row["Day School Attainment"]
+        your_rate = row["Your school Correct %"]
+        your_rate_pct = your_rate if your_rate >= 1 else your_rate * 100
+
+        if attainment == "High attainment":
+            expected = st.session_state.mcq_exp_high
+        elif attainment == "Intermediate attainment":
+            expected = st.session_state.mcq_exp_inter
+        else:  # Low attainment
+            expected = st.session_state.mcq_exp_low
+
+        return "Attained ✓" if your_rate_pct >= expected else "Below Expectation ✗"
+
+    df_mcq_display["School-based Expected Attainment"] = df_mcq_display.apply(get_mcq_expected_status, axis=1)
+
     st.write("📊 **總覽表 (自動更新)：**")
     st.dataframe(df_mcq_display, use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.info("Step 3：篩選與高亮分析")
+    st.info("Step 4：篩選與高亮分析")
 
     f_cols_mcq = st.columns(max(len(st.session_state.mcq_custom_cols), 1))
     active_filters_mcq = {}
