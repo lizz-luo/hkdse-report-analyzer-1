@@ -73,6 +73,8 @@ if not df_mcq_c.empty:
     df_mcq_c = prepare_mcq_analysis_for_custom(df_mcq_c)
     if "題號" not in df_mcq_c.columns:
         df_mcq_c.insert(0, "題號", df_mcq_c.get("Question Number", range(1, len(df_mcq_c) + 1)))
+    if "初始序列" not in df_mcq_c.columns:
+        df_mcq_c.insert(0, "初始序列", range(1, len(df_mcq_c) + 1))
 
     sel_q_mcq = None
     step1_col, step2_col = st.columns([1, 1])
@@ -94,8 +96,10 @@ if not df_mcq_c.empty:
 
     with step2_col:
         st.info("Step 2：為每一題設定分類 (下拉聯想與新增)")
-        q_mcq = df_mcq_c["題號"].tolist()
-        sel_q_mcq = st.multiselect("選擇要輸入標籤的題號：", q_mcq, default=q_mcq[:1], key="mcq_q_sel")
+        question_options = [f"{row['題號']} [{row['初始序列']}]" for _, row in df_mcq_c.iterrows()]
+        seq_map = {f"{row['題號']} [{row['初始序列']}]": row['初始序列'] for _, row in df_mcq_c.iterrows()}
+        sel_q_mcq_display = st.multiselect("選擇要輸入標籤的題號：", question_options, default=question_options[:1], key="mcq_q_sel")
+        sel_q_mcq = [seq_map[q] for q in sel_q_mcq_display]
 
         if st.session_state.mcq_clear_inputs:
             for col in st.session_state.mcq_custom_cols:
@@ -105,10 +109,10 @@ if not df_mcq_c.empty:
                 st.session_state[new_key] = ""
             st.session_state.mcq_clear_inputs = False
 
-        if sel_q_mcq:
-            selected_display = ", ".join(str(x) for x in sel_q_mcq)
-            st.write(f"**正在編輯：第 {selected_display} 題**")
-            all_values = [st.session_state.mcq_custom_values.get(q, {}) for q in sel_q_mcq]
+        if sel_q_mcq_display:
+            selected_display = ", ".join(sel_q_mcq_display)
+            st.write(f"**正在編輯：{selected_display}**")
+            all_values = [st.session_state.mcq_custom_values.get(idx, {}) for idx in sel_q_mcq]
             curr_vals_mcq = {}
             for col in st.session_state.mcq_custom_cols:
                 values_for_col = {v.get(col, "") for v in all_values}
@@ -147,22 +151,22 @@ if not df_mcq_c.empty:
             save_note_m.caption(st.session_state.mcq_save_note)
 
         if submit_btn_m and sel_q_mcq:
-            for sel_q in sel_q_mcq:
-                if sel_q not in st.session_state.mcq_custom_values:
-                    st.session_state.mcq_custom_values[sel_q] = {}
+            for idx in sel_q_mcq:
+                if idx not in st.session_state.mcq_custom_values:
+                    st.session_state.mcq_custom_values[idx] = {}
                 for col, val in input_results_m.items():
                     if val:
-                        st.session_state.mcq_custom_values[sel_q][col] = val
+                        st.session_state.mcq_custom_values[idx][col] = val
                         if val not in st.session_state.mcq_col_options_history[col]:
                             st.session_state.mcq_col_options_history[col].append(val)
             st.session_state["mcq_last_saved_q"] = sel_q_mcq
-            st.session_state["mcq_save_note"] = f"已為第 {selected_display} 題設定分類"
+            st.session_state["mcq_save_note"] = f"已為 {selected_display} 設定分類"
             st.session_state.mcq_clear_inputs = True
             st.rerun()
 
     df_mcq_display = df_mcq_c.copy()
     for col in st.session_state.mcq_custom_cols:
-        df_mcq_display[col] = df_mcq_display["題號"].apply(lambda x: st.session_state.mcq_custom_values.get(x, {}).get(col, ""))
+        df_mcq_display[col] = df_mcq_display["初始序列"].apply(lambda x: st.session_state.mcq_custom_values.get(x, {}).get(col, ""))
 
     st.write("📊 **總覽表 (自動更新)：**")
     st.dataframe(df_mcq_display, use_container_width=True, hide_index=True)

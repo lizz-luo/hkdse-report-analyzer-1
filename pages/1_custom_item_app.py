@@ -38,6 +38,8 @@ st.success(f"已載入主 app 處理完成的資料：{source_name}")
 if not df_item_c.empty:
     if "題號" not in df_item_c.columns:
         df_item_c.insert(0, "題號", df_item_c.get("Item", range(1, len(df_item_c) + 1)))
+    if "初始序列" not in df_item_c.columns:
+        df_item_c.insert(0, "初始序列", range(1, len(df_item_c) + 1))
 
     sel_q = None
     step1_col, step2_col = st.columns([1, 1])
@@ -57,8 +59,10 @@ if not df_item_c.empty:
 
     with step2_col:
         st.info("Step 2：為每一題設定分類 (下拉聯想與新增)")
-        questions = df_item_c["題號"].tolist()
-        sel_qs = st.multiselect("選擇要輸入標籤的題號：", questions, default=questions[:1], key="item_q_sel")
+        question_options = [f"{row['題號']} [{row['初始序列']}]" for _, row in df_item_c.iterrows()]
+        seq_map = {f"{row['題號']} [{row['初始序列']}]": row['初始序列'] for _, row in df_item_c.iterrows()}
+        sel_qs_display = st.multiselect("選擇要輸入標籤的題號：", question_options, default=question_options[:1], key="item_q_sel")
+        sel_qs = [seq_map[q] for q in sel_qs_display]
 
         if st.session_state.item_clear_inputs:
             for col in st.session_state.item_custom_cols:
@@ -68,10 +72,10 @@ if not df_item_c.empty:
                 st.session_state[new_key] = ""
             st.session_state.item_clear_inputs = False
 
-        if sel_qs:
-            selected_display = ", ".join(str(x) for x in sel_qs)
-            st.write(f"**正在編輯：第 {selected_display} 題**")
-            all_values = [st.session_state.item_custom_values.get(q, {}) for q in sel_qs]
+        if sel_qs_display:
+            selected_display = ", ".join(sel_qs_display)
+            st.write(f"**正在編輯：{selected_display}**")
+            all_values = [st.session_state.item_custom_values.get(idx, {}) for idx in sel_qs]
             current_values = {}
             for col in st.session_state.item_custom_cols:
                 values_for_col = {v.get(col, "") for v in all_values}
@@ -110,22 +114,22 @@ if not df_item_c.empty:
             save_note.caption(st.session_state.item_save_note)
 
         if submit_btn and sel_qs:
-            for sel_q in sel_qs:
-                if sel_q not in st.session_state.item_custom_values:
-                    st.session_state.item_custom_values[sel_q] = {}
+            for idx in sel_qs:
+                if idx not in st.session_state.item_custom_values:
+                    st.session_state.item_custom_values[idx] = {}
                 for col, val in input_results.items():
                     if val:
-                        st.session_state.item_custom_values[sel_q][col] = val
+                        st.session_state.item_custom_values[idx][col] = val
                         if val not in st.session_state.item_col_options_history[col]:
                             st.session_state.item_col_options_history[col].append(val)
             st.session_state["item_last_saved_q"] = sel_qs
-            st.session_state["item_save_note"] = f"已為第 {selected_display} 題設定分類"
+            st.session_state["item_save_note"] = f"已為 {selected_display} 設定分類"
             st.session_state.item_clear_inputs = True
             st.rerun()
 
     df_display = df_item_c.copy()
     for col in st.session_state.item_custom_cols:
-        df_display[col] = df_display["題號"].apply(lambda x: st.session_state.item_custom_values.get(x, {}).get(col, ""))
+        df_display[col] = df_display["初始序列"].apply(lambda x: st.session_state.item_custom_values.get(x, {}).get(col, ""))
 
     st.write("📊 **總覽表 (自動更新)：**")
     st.dataframe(df_display, use_container_width=True, hide_index=True)

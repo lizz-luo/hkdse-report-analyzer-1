@@ -30,6 +30,7 @@ def extract_item_analysis(file_bytes):
         "Day schools Mean %", "Day schools SD"
     ]
     df = pd.DataFrame(extracted_data, columns=columns)
+    df.insert(0, "初始序列", range(1, len(df) + 1))
     numeric_cols = [
         "Max Mark", "Your school Attm. No.", "Your school Attem. %", "Your school Mean",
         "Your school SD", "Day schools Attem. %", "Day schools Mean", "Day schools SD"
@@ -93,6 +94,7 @@ def extract_mcq_analysis(file_bytes):
             'Day schools A_No.', 'Day schools B_No.', 'Day schools C_No.', 'Day schools D_No.'
         ]
         df = df[column_order]
+        df.insert(0, "初始序列", range(1, len(df) + 1))
         for col in df.columns:
             if '_No.' in col:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
