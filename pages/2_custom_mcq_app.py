@@ -15,6 +15,10 @@ if "item_custom_values" not in st.session_state:
     st.session_state.item_custom_values = {}
 if "mcq_custom_values" not in st.session_state:
     st.session_state.mcq_custom_values = {}
+if "mcq_clear_inputs" not in st.session_state:
+    st.session_state.mcq_clear_inputs = False
+if "mcq_save_note" not in st.session_state:
+    st.session_state.mcq_save_note = ""
 
 def prepare_mcq_analysis_for_custom(df):
     df = df.copy()
@@ -94,27 +98,42 @@ if not df_mcq_c.empty:
         sel_q_mcq = st.selectbox("選擇要輸入標籤的題號：", q_mcq, key="mcq_q_sel")
         curr_vals_mcq = st.session_state.mcq_custom_values.get(sel_q_mcq, {})
 
-        st.write(f"**正在編輯：第 {sel_q_mcq} 題**")
-        save_note_m = st.empty()
-        with st.form(f"mcq_save_form_{sel_q_mcq}", clear_on_submit=True):
-            input_results_m = {}
+        if st.session_state.mcq_clear_inputs:
             for col in st.session_state.mcq_custom_cols:
-                history_opts = st.session_state.mcq_col_options_history.get(col, [])
-                options = [""] + history_opts + ["➕ 輸入新文本..."]
-                default_idx = 0
-                curr_val = curr_vals_mcq.get(col, "")
-                if curr_val in options:
-                    default_idx = options.index(curr_val)
-                sel_col, new_col = st.columns([1, 1])
-                with sel_col:
-                    sel_val = st.selectbox(f"{col}:", options=options, index=default_idx, key=f"sel_mcq_{col}")
-                with new_col:
-                    if sel_val == "➕ 輸入新文本...":
-                        new_val = st.text_input(f"請輸入新的「{col}」:", key=f"new_val_mcq_{col}")
-                        input_results_m[col] = new_val
-                    else:
-                        input_results_m[col] = sel_val
-            submit_btn_m = st.form_submit_button("📥 儲存設定")
+                sel_key = f"sel_mcq_{col}"
+                new_key = f"new_val_mcq_{col}"
+                st.session_state[sel_key] = ""
+                st.session_state[new_key] = ""
+            st.session_state.mcq_clear_inputs = False
+
+        st.write(f"**正在編輯：第 {sel_q_mcq} 題**")
+        input_results_m = {}
+        for col in st.session_state.mcq_custom_cols:
+            history_opts = st.session_state.mcq_col_options_history.get(col, [])
+            options = [""] + history_opts + ["輸入新文本"]
+            default_idx = 0
+            curr_val = curr_vals_mcq.get(col, "")
+            if curr_val in options:
+                default_idx = options.index(curr_val)
+            sel_col, new_col = st.columns([1, 1])
+            with sel_col:
+                sel_key = f"sel_mcq_{col}"
+                sel_val = st.selectbox(f"{col}:", options=options, index=default_idx, key=sel_key)
+            with new_col:
+                if sel_val == "輸入新文本":
+                    new_key = f"new_val_mcq_{col}"
+                    if new_key not in st.session_state:
+                        st.session_state[new_key] = ""
+                    new_val = st.text_input(f"請輸入新的「{col}」:", key=new_key)
+                    input_results_m[col] = new_val
+                else:
+                    input_results_m[col] = sel_val
+        submit_col, note_col = st.columns([1, 1])
+        with submit_col:
+            submit_btn_m = st.button("📥 儲存設定", key=f"mcq_save_btn_{sel_q_mcq}")
+        save_note_m = note_col.empty()
+        if st.session_state.mcq_save_note:
+            save_note_m.caption(st.session_state.mcq_save_note)
 
         if submit_btn_m:
             if sel_q_mcq not in st.session_state.mcq_custom_values:
@@ -125,7 +144,9 @@ if not df_mcq_c.empty:
                     if val not in st.session_state.mcq_col_options_history[col]:
                         st.session_state.mcq_col_options_history[col].append(val)
             st.session_state["mcq_last_saved_q"] = sel_q_mcq
-            save_note_m.caption(f"已為第 {sel_q_mcq} 題設定分類")
+            st.session_state["mcq_save_note"] = f"已為第 {sel_q_mcq} 題設定分類"
+            st.session_state.mcq_clear_inputs = True
+            st.rerun()
 
     df_mcq_display = df_mcq_c.copy()
     for col in st.session_state.mcq_custom_cols:

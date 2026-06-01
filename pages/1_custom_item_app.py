@@ -15,6 +15,10 @@ if "item_custom_values" not in st.session_state:
     st.session_state.item_custom_values = {}
 if "mcq_custom_values" not in st.session_state:
     st.session_state.mcq_custom_values = {}
+if "item_clear_inputs" not in st.session_state:
+    st.session_state.item_clear_inputs = False
+if "item_save_note" not in st.session_state:
+    st.session_state.item_save_note = ""
 
 st.page_link("app.py", label="⬅️ 返回主 app", icon="⬅️")
 
@@ -57,27 +61,42 @@ if not df_item_c.empty:
         sel_q = st.selectbox("選擇要輸入標籤的題號：", questions, key="item_q_sel")
         current_values = st.session_state.item_custom_values.get(sel_q, {})
 
-        st.write(f"**正在編輯：第 {sel_q} 題**")
-        save_note = st.empty()
-        with st.form(f"item_save_form_{sel_q}", clear_on_submit=True):
-            input_results = {}
+        if st.session_state.item_clear_inputs:
             for col in st.session_state.item_custom_cols:
-                history_opts = st.session_state.item_col_options_history.get(col, [])
-                options = [""] + history_opts + ["➕ 輸入新文本..."]
-                default_idx = 0
-                curr_val = current_values.get(col, "")
-                if curr_val in options:
-                    default_idx = options.index(curr_val)
-                sel_col, new_col = st.columns([1, 1])
-                with sel_col:
-                    sel_val = st.selectbox(f"{col}:", options=options, index=default_idx, key=f"sel_item_{col}")
-                with new_col:
-                    if sel_val == "➕ 輸入新文本...":
-                        new_val = st.text_input(f"請輸入新的「{col}」:", key=f"new_val_item_{col}")
-                        input_results[col] = new_val
-                    else:
-                        input_results[col] = sel_val
-            submit_btn = st.form_submit_button("📥 儲存設定")
+                sel_key = f"sel_item_{col}"
+                new_key = f"new_val_item_{col}"
+                st.session_state[sel_key] = ""
+                st.session_state[new_key] = ""
+            st.session_state.item_clear_inputs = False
+
+        st.write(f"**正在編輯：第 {sel_q} 題**")
+        input_results = {}
+        for col in st.session_state.item_custom_cols:
+            history_opts = st.session_state.item_col_options_history.get(col, [])
+            options = [""] + history_opts + ["輸入新文本"]
+            default_idx = 0
+            curr_val = current_values.get(col, "")
+            if curr_val in options:
+                default_idx = options.index(curr_val)
+            sel_col, new_col = st.columns([1, 1])
+            with sel_col:
+                sel_key = f"sel_item_{col}"
+                sel_val = st.selectbox(f"{col}:", options=options, index=default_idx, key=sel_key)
+            with new_col:
+                if sel_val == "輸入新文本":
+                    new_key = f"new_val_item_{col}"
+                    if new_key not in st.session_state:
+                        st.session_state[new_key] = ""
+                    new_val = st.text_input(f"請輸入新的「{col}」:", key=new_key)
+                    input_results[col] = new_val
+                else:
+                    input_results[col] = sel_val
+        submit_col, note_col = st.columns([1, 1])
+        with submit_col:
+            submit_btn = st.button("📥 儲存設定", key=f"item_save_btn_{sel_q}")
+        save_note = note_col.empty()
+        if st.session_state.item_save_note:
+            save_note.caption(st.session_state.item_save_note)
 
         if submit_btn:
             if sel_q not in st.session_state.item_custom_values:
@@ -88,7 +107,9 @@ if not df_item_c.empty:
                     if val not in st.session_state.item_col_options_history[col]:
                         st.session_state.item_col_options_history[col].append(val)
             st.session_state["item_last_saved_q"] = sel_q
-            save_note.caption(f"已為第 {sel_q} 題設定分類")
+            st.session_state["item_save_note"] = f"已為第 {sel_q} 題設定分類"
+            st.session_state.item_clear_inputs = True
+            st.rerun()
 
     df_display = df_item_c.copy()
     for col in st.session_state.item_custom_cols:
